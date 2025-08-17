@@ -1,23 +1,30 @@
+
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
 #include <QMainWindow>
 
-QT_BEGIN_NAMESPACE
-namespace Ui {
-class MainWindow;
-}
-QT_END_NAMESPACE
+class BoardView;
+class RackView;
+class TileBag;
 
-class MainWindow : public QMainWindow
-{
+class MainWindow : public QMainWindow {
     Q_OBJECT
-
 public:
-    MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
+    explicit MainWindow(QWidget *parent=nullptr);
+
+private slots:
+    void onValidate();
+    void onUndo();
+    void onRefill();
 
 private:
-    Ui::MainWindow *ui;
+    BoardView *m_board;
+    RackView *m_rack;
+    TileBag *m_bag;
+
+    void refillToSeven();
+    QVector<QVector<QChar>> boardSnapshot() const;
 };
+
 #endif // MAINWINDOW_H
