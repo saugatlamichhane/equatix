@@ -12,14 +12,19 @@
 #include <QMessageBox>
 #include <QStatusBar>
 #include <QLabel>
+#include <QTableWidgetItem>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
     m_board(new BoardView(15, this)),
-    m_rack(new RackView(this)),
-    m_bag(new TileBag())
+    m_bag(new TileBag()),
+    m_currentPlayer(0)
 {
-    setWindowTitle("Equatix");
+    // create two racks (players)
+    m_racks[0] = new RackView(this);
+    m_racks[1] = new RackView(this);
+
+    setWindowTitle("Equatix — Two Player");
     auto *central = new QWidget(this);
     auto *v = new QVBoxLayout(central);
 
@@ -30,11 +35,26 @@ MainWindow::MainWindow(QWidget *parent)
     v->addWidget(title);
     v->addWidget(m_board, 1);
 
-    auto *rackRow = new QHBoxLayout;
-    rackRow->addWidget(new QLabel("Rack:"));
-    rackRow->addWidget(m_rack, 1);
-    v->addLayout(rackRow);
+    // Racks row: Player 1 | Player 2
+    auto *racksRow = new QHBoxLayout;
+    {
+        auto *p1Layout = new QVBoxLayout;
+        p1Layout->addWidget(new QLabel("Player 1 Rack:"));
+        p1Layout->addWidget(m_racks[0]);
+        racksRow->addLayout(p1Layout);
 
+        auto *spacer = new QWidget;
+        spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        racksRow->addWidget(spacer);
+
+        auto *p2Layout = new QVBoxLayout;
+        p2Layout->addWidget(new QLabel("Player 2 Rack:"));
+        p2Layout->addWidget(m_racks[1]);
+        racksRow->addLayout(p2Layout);
+    }
+    v->addLayout(racksRow);
+
+    // Toolbar actions
     auto *toolbar = addToolBar("Actions");
     QAction *validate = new QAction("Validate Turn", this);
     QAction *undo = new QAction("Undo", this);
@@ -48,94 +68,127 @@ MainWindow::MainWindow(QWidget *parent)
     connect(swap, &QAction::triggered, this, &MainWindow::onSwap);
 
     setCentralWidget(central);
-    statusBar()->showMessage("Drag tiles to the board to form valid equations.");
+    statusBar()->showMessage("Player 1's turn. Drag tiles from your rack to the board to form valid equations.");
 
-    refillRack();
+    // initial fill for both racks
+    refillRack(0);
+    refillRack(1);
+
+    // ensure only the active player's rack is enabled
+    enableRacksForCurrentPlayer();
 }
 
-void MainWindow::refillRack() {
-    if (!m_rack->hasEqualsTile()) {
+void MainWindow::enableRacksForCurrentPlayer() {
+    m_racks[0]->setEnabled(m_currentPlayer == 0);
+    m_racks[1]->setEnabled(m_currentPlayer == 1);
+}
+
+void MainWindow::refillRack(int player) {
+    if (player < 0 || player > 1) return;
+    RackView *rack = m_racks[player];
+
+    // Ensure each rack has exactly one '=' tile (if we want that invariant)
+    if (!rack->hasEqualsTile()) {
         QChar eq = m_bag->drawEquals();
         if (!eq.isNull()) {
-            m_rack->addTile(eq);
+            rack->addTile(eq);
         }
     }
-    while (m_rack->countNonEqualsTiles() < 7) {
+
+    // Fill other tiles up to 7 non-equals tiles
+    while (rack->countNonEqualsTiles() < 7) {
         QChar ch = m_bag->drawOther();
         if (ch.isNull()) break;
-        m_rack->addTile(ch);
+        rack->addTile(ch);
     }
+}
+
+QVector<QVector<QChar>> MainWindow::boardSnapshot() const {
+    int R = m_board->rowCount(), C = m_board->columnCount();
+    QVector<QVector<QChar>> snap(R, QVector<QChar>(C));
+    for (int r = 0; r < R; ++r) {
+        for (int c = 0; c < C; ++c) {
+            QTableWidgetItem *it = m_board->item(r, c);
+            if (it && !it->text().isEmpty()) snap[r][c] = it->text().at(0);
+            else snap[r][c] = QChar();
+        }
+    }
+    return snap;
+}
+
+void MainWindow::endTurn() {
+    // toggle player
+    m_currentPlayer = 1 - m_currentPlayer;
+    enableRacksForCurrentPlayer();
+    statusBar()->showMessage(QString("Player %1's turn").arg(m_currentPlayer + 1), 2000);
 }
 
 void MainWindow::onValidate() {
-    if (m_board->newTiles().isEmpty()){
+    // ensure the active player actually placed tiles
+    if (m_board->newTiles().isEmpty()) {
         QMessageBox::information(this, "Empty Turn", "You haven't placed any tiles.");
         return;
     }
+
     auto snap = boardSnapshot();
     QString why;
     if (!EquationValidator::validate(snap, m_board->newTiles(), why)) {
         QMessageBox::warning(this, "Invalid Turn", why);
         return;
     }
+
+    // lock tiles and refill only the current player's rack
     m_board->lockNewTiles();
-    refillRack();
-    statusBar()->showMessage("Turn accepted ✔", 2000);
+    refillRack(m_currentPlayer);
+
+    // end turn: switch to other player
+    endTurn();
 }
 
 void MainWindow::onUndo() {
+    // only the current player may undo their new placements during their turn
     QList<QChar> returned;
     m_board->rollbackNewTiles(returned);
+    // give tiles back to current player's rack
     for (QChar c : returned) {
-        m_rack->addTile(c);
+        m_racks[m_currentPlayer]->addTile(c);
     }
     statusBar()->showMessage("Undid placements", 1500);
 }
 
-// ### MODIFIED SECTION ###
 void MainWindow::onSwap() {
-    SwapDialog dlg(m_rack->nonEqualsTiles(), this);
+    // Swap operates on current player's rack
+    RackView *rack = m_racks[m_currentPlayer];
+
+    SwapDialog dlg(rack->nonEqualsTiles(), this);
     if (dlg.exec() == QDialog::Accepted) {
         QList<QChar> tilesToSwap = dlg.getSelectedTiles();
         if (tilesToSwap.isEmpty()) {
-            return; // User clicked OK but selected nothing
+            return; // nothing selected
         }
 
         int swapCount = tilesToSwap.count();
 
-        // **Improved Check**: Ensure bag has enough tiles for a 1-for-1 swap.
+        // Ensure bag has enough tiles
         if (m_bag->otherTilesCount() < swapCount) {
             QMessageBox::warning(this, "Cannot Swap", "There are not enough tiles left in the bag to perform this swap.");
             return;
         }
 
-        // 1. Remove selected tiles from rack
-        m_rack->removeTiles(tilesToSwap);
+        // Remove selected tiles from player's rack
+        rack->removeTiles(tilesToSwap);
 
-        // 2. Return tiles to the bag
+        // Return them to bag
         m_bag->returnTiles(tilesToSwap);
 
-        // 3. **Direct Replacement**: Draw the exact number of new tiles.
+        // Draw replacements and add them to player's rack
         for (int i = 0; i < swapCount; ++i) {
             QChar newTile = m_bag->drawOther();
-            if (!newTile.isNull()) {
-                m_rack->addTile(newTile);
-            }
+            if (!newTile.isNull()) rack->addTile(newTile);
         }
 
-        statusBar()->showMessage(QString("Swapped %1 tile(s).").arg(swapCount), 2000);
+        // end player's turn after swapping
+        endTurn();
+        statusBar()->showMessage(QString("Player %1 swapped %2 tile(s).").arg(m_currentPlayer == 0 ? 2 : 1).arg(swapCount), 2000);
     }
-}
-// ### END MODIFIED SECTION ###
-
-
-QVector<QVector<QChar>> MainWindow::boardSnapshot() const {
-    int R = m_board->rowCount(), C = m_board->columnCount();
-    QVector<QVector<QChar>> snap(R, QVector<QChar>(C));
-    for (int r=0; r<R; ++r) for (int c=0; c<C; ++c) {
-            QTableWidgetItem *it = m_board->item(r,c);
-            if (it && !it->text().isEmpty()) snap[r][c] = it->text().at(0);
-            else snap[r][c] = QChar();
-        }
-    return snap;
 }
