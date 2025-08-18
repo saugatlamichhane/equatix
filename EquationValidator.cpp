@@ -120,31 +120,100 @@ bool EquationValidator::validate(const QVector<QVector<QChar>>& board,
                                  const QSet<QPair<int,int>>& newTiles,
                                  QString &errorMessage)
 {
-    if (newTiles.isEmpty()) { errorMessage = "Place at least one tile."; return false; }
+    if (newTiles.isEmpty()) {
+        errorMessage = "Place at least one tile.";
+        return false;
+    }
 
+    int rows = board.size();
+    int cols = board[0].size();
+    int centerR = rows / 2;
+    int centerC = cols / 2;
+
+    // --- 1. Check if there are old tiles
+    bool anyOldTile = false;
+    for (int r = 0; r < rows; ++r)
+        for (int c = 0; c < cols; ++c)
+            if (!board[r][c].isNull() && !newTiles.contains({r,c}))
+                anyOldTile = true;
+
+    // --- 2. First move must touch center
+    if (!anyOldTile) {
+        if (!newTiles.contains({centerR, centerC})) {
+            errorMessage = "First move must cover the center square.";
+            return false;
+        }
+    }
+
+    // --- 3. New tiles must be in one line
+    QSet<int> rowSet, colSet;
+    for (auto rc : newTiles) {
+        rowSet.insert(rc.first);
+        colSet.insert(rc.second);
+    }
+
+    bool sameRow = (rowSet.size() == 1);
+    bool sameCol = (colSet.size() == 1);
+    if (!(sameRow || sameCol)) {
+        errorMessage = "Tiles must be placed in one straight line (row or column).";
+        return false;
+    }
+
+    // --- 4. If not first move, must touch at least one existing tile
+    if (anyOldTile) {
+        bool connected = false;
+        for (auto rc : newTiles) {
+            int r = rc.first, c = rc.second;
+            if ((r>0 && !board[r-1][c].isNull() && !newTiles.contains({r-1,c})) ||
+                (r+1<rows && !board[r+1][c].isNull() && !newTiles.contains({r+1,c})) ||
+                (c>0 && !board[r][c-1].isNull() && !newTiles.contains({r,c-1})) ||
+                (c+1<cols && !board[r][c+1].isNull() && !newTiles.contains({r,c+1}))) {
+                connected = true;
+                break;
+            }
+        }
+        if (!connected) {
+            errorMessage = "New tiles must connect to existing equations.";
+            return false;
+        }
+    }
+
+    // --- 5. Validate all equations formed
     QSet<QString> checked;
     for (auto rc : newTiles) {
         int r = rc.first, c = rc.second;
-        // horizontal run
+
+        // Horizontal run
         QString runH = readRunH(board, r, c);
         if (runH.size() >= 2 && runH.contains('=')) {
             QString key = QString("H%1:%2").arg(r).arg(runH);
             if (!checked.contains(key)) {
                 checked.insert(key);
                 QString why;
-                if (!isTrueEquation(runH, why)) { errorMessage = QString("Row %1: '%2' -> %3").arg(r+1).arg(runH, why); return false; }
+                if (!isTrueEquation(runH, why)) {
+                    errorMessage = QString("Row %1: '%2' -> %3")
+                    .arg(r+1).arg(runH, why);
+                    return false;
+                }
             }
         }
-        // vertical run
+
+        // Vertical run
         QString runV = readRunV(board, r, c);
         if (runV.size() >= 2 && runV.contains('=')) {
             QString key = QString("V%1:%2").arg(c).arg(runV);
             if (!checked.contains(key)) {
                 checked.insert(key);
                 QString why;
-                if (!isTrueEquation(runV, why)) { errorMessage = QString("Col %1: '%2' -> %3").arg(c+1).arg(runV, why); return false; }
+                if (!isTrueEquation(runV, why)) {
+                    errorMessage = QString("Col %1: '%2' -> %3")
+                    .arg(c+1).arg(runV, why);
+                    return false;
+                }
             }
         }
     }
+
     return true;
 }
+
