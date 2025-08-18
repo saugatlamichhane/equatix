@@ -8,6 +8,14 @@
 
 struct Placement { int row; int col; QChar ch; };
 
+enum MultiplierType {
+    None,
+    DoublePiece,
+    TriplePiece,
+    DoubleEquation,
+    TripleEquation
+};
+
 class BoardView : public QTableWidget {
     Q_OBJECT
 public:
@@ -26,8 +34,11 @@ protected:
 
 private:
     bool isAllowed(QChar ch) const;
+    void initializeMultipliers();
+
     int N;
     QSet<QPair<int,int>> m_newThisTurn;
+    QMap<QPair<int,int>, MultiplierType> m_multiplierMap;
 };
 
 #endif // BOARDVIEW_H
