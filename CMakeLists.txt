@@ -21,6 +21,7 @@ set(PROJECT_SOURCES
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     find_package(Qt6 REQUIRED COMPONENTS Core)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
     qt_add_executable(equatix
         MANUAL_FINALIZATION
@@ -30,6 +31,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         RackView.h RackView.cpp
         TileBag.h TileBag.cpp
         EquationValidator.h EquationValidator.cpp
+        SwapDialog.h SwapDialog.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET equatix APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
@@ -50,6 +52,7 @@ else()
 endif()
 
 target_link_libraries(equatix PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(equatix PRIVATE Qt6::Core)
 target_link_libraries(equatix PRIVATE Qt6::Core)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.

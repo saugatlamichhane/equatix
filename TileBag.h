@@ -3,16 +3,26 @@
 
 #include <QVector>
 #include <QChar>
+#include <QList>
 
 class TileBag {
 public:
     TileBag();
-    bool empty() const { return m_idx >= m_tiles.size(); }
-    QChar draw(); // returns null QChar if empty
+    bool otherTilesEmpty() const;
+    int otherTilesCount() const;
+
+    QChar drawEquals(); // Draws from the equals pile
+    QChar drawOther();  // Draws from the numbers/operators pile
+
+    void returnTiles(const QList<QChar>& chars); // For swapping
+
 private:
-    QVector<QChar> m_tiles;
-    int m_idx = 0;
+    void shuffleOthers();
+
+    QVector<QChar> m_equalsTiles;
+    QVector<QChar> m_otherTiles;
+    int m_equalsIdx = 0;
+    int m_otherIdx = 0;
 };
 
 #endif // TILEBAG_H
-

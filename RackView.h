@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QVector>
 #include <QChar>
+#include <QList>
 
 class TileLabel;
 
@@ -12,13 +13,17 @@ class RackView : public QWidget {
 public:
     explicit RackView(QWidget *parent=nullptr);
     int countTiles() const;
+    int countNonEqualsTiles() const;
+    bool hasEqualsTile() const;
+
+    QList<QChar> nonEqualsTiles() const;
+    void removeTiles(const QList<QChar>& charsToRemove);
+
     void addTile(QChar ch);
     void addTiles(const QVector<QChar>& chars);
+
 signals:
     void rackChanged();
-private:
-    void tidy();
 };
 
 #endif // RACKVIEW_H
-

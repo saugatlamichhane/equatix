@@ -1,4 +1,3 @@
-
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
@@ -16,14 +15,14 @@ public:
 private slots:
     void onValidate();
     void onUndo();
-    void onRefill();
+    void onSwap(); // New slot for swapping tiles
 
 private:
     BoardView *m_board;
     RackView *m_rack;
     TileBag *m_bag;
 
-    void refillToSeven();
+    void refillRack(); // Updated logic
     QVector<QVector<QChar>> boardSnapshot() const;
 };
 
