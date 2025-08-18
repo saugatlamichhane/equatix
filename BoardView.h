@@ -11,7 +11,7 @@ struct Placement { int row; int col; QChar ch; };
 class BoardView : public QTableWidget {
     Q_OBJECT
 public:
-    explicit BoardView(int n=11, QWidget *parent=nullptr);
+    explicit BoardView(int n=15, QWidget *parent=nullptr);
 
     const QSet<QPair<int,int>>& newTiles() const { return m_newThisTurn; }
     void lockNewTiles();

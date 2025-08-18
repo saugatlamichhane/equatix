@@ -16,6 +16,11 @@ BoardView::BoardView(int n, QWidget *parent)
     horizontalHeader()->setVisible(false);
     verticalHeader()->setVisible(false);
     setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    // prevent scrollbars from appearing (they would occupy the margins)
+
+    // remove the frame if you want a clean centered look
+    setFrameStyle(QFrame::NoFrame);
     for (int r=0;r<N;++r) {
         setRowHeight(r, 40);
         setColumnWidth(r, 40);
@@ -27,13 +32,37 @@ BoardView::BoardView(int n, QWidget *parent)
         }
     }
     setStyleSheet("QTableWidget::item{ font-weight: 700; font-size: 16px; }");
+
+
 }
 
 void BoardView::resizeEvent(QResizeEvent* e) {
     QTableWidget::resizeEvent(e);
-    int s = qMin((width()-2)/N, (height()-2)/N);
-    for (int i=0;i<N;++i) { setRowHeight(i,s); setColumnWidth(i,s); }
+
+    // compute a square cell size
+    int s = qMax(1, qMin(width() / N, height() / N));
+
+    // apply same size to every row/col so cells stay square
+    for (int i = 0; i < N; ++i) {
+        setRowHeight(i, s);
+        setColumnWidth(i, s);
+    }
+
+    // total grid size
+    int gridW = s * N;
+    int gridH = s * N;
+
+    // margins to center the viewport (non-negative)
+    int left  = qMax(0, (width()  - gridW) / 2);
+    int top   = qMax(0, (height() - gridH) / 2);
+
+    // move the viewport inward so the grid appears centered
+    setViewportMargins(left, top, left, top);
+
+    // force a repaint if needed
+    viewport()->update();
 }
+
 
 void BoardView::dragEnterEvent(QDragEnterEvent* e) {
     if (e->mimeData()->hasFormat(kMimeType)) e->acceptProposedAction();

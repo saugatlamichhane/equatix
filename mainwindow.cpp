@@ -14,7 +14,7 @@
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
-    m_board(new BoardView(11, this)),
+    m_board(new BoardView(15, this)),
     m_rack(new RackView(this)),
     m_bag(new TileBag())
 {
