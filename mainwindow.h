@@ -8,6 +8,7 @@
 class BoardView;
 class RackView;
 class TileBag;
+class QLabel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -29,11 +30,17 @@ private:
     // game state
     int m_currentPlayer; // 0 or 1
 
+    // scoring
+    int m_scores[2] = {0, 0};
+    QLabel *m_scoreLabels[2] = {nullptr, nullptr};
+
     // helpers
     void refillRack(int player);                 // refill specific player's rack
     QVector<QVector<QChar>> boardSnapshot() const;
     void endTurn();                              // toggle players, enable appropriate rack, update status
     void enableRacksForCurrentPlayer();          // enable/disable racks according to current player
+
+    int computeScoreForTurn(const QVector<QVector<QChar>>& snap, const QSet<QPair<int,int>>& newTiles);
 };
 
 #endif // MAINWINDOW_H

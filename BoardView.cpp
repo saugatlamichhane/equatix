@@ -28,6 +28,7 @@ BoardView::BoardView(int n, QWidget *parent)
             QTableWidgetItem *it = new QTableWidgetItem("");
             it->setTextAlignment(Qt::AlignCenter);
             it->setData(Qt::UserRole+1, false); // locked?
+            it->setData(Qt::UserRole+3, false); // multiplier used?
 
             MultiplierType mt = m_multiplierMap.value({r,c}, None);
             it->setData(Qt::UserRole+2, mt);
@@ -126,7 +127,9 @@ void BoardView::lockNewTiles() {
         QTableWidgetItem* it = item(rc.first, rc.second);
         if (it) {
             it->setData(Qt::UserRole+1, true);
-            it->setBackground(QColor(235,255,235)); // locked
+            // mark multiplier as used (consumed) when locking
+            it->setData(Qt::UserRole+3, true);
+            it->setBackground(QColor(235,255,235)); // locked color
         }
     }
     m_newThisTurn.clear();
@@ -139,14 +142,20 @@ void BoardView::rollbackNewTiles(QList<QChar> &returned) {
             returned.append(it->text().at(0));
             it->setText("");
 
-            // restore multiplier color
+            // restore multiplier color (only if multiplier not previously used)
+            bool used = it->data(Qt::UserRole+3).toBool();
             MultiplierType mt = static_cast<MultiplierType>(it->data(Qt::UserRole+2).toInt());
-            switch(mt) {
-            case DoublePiece: it->setBackground(QColor(173,216,230)); break;
-            case TriplePiece: it->setBackground(QColor(0,191,255)); break;
-            case DoubleEquation: it->setBackground(QColor(255,182,193)); break;
-            case TripleEquation: it->setBackground(QColor(255,69,0)); break;
-            default: it->setBackground(QBrush()); break;
+            if (!used) {
+                switch(mt) {
+                case DoublePiece: it->setBackground(QColor(173,216,230)); break;
+                case TriplePiece: it->setBackground(QColor(0,191,255)); break;
+                case DoubleEquation: it->setBackground(QColor(255,182,193)); break;
+                case TripleEquation: it->setBackground(QColor(255,69,0)); break;
+                default: it->setBackground(QBrush()); break;
+                }
+            } else {
+                // if multiplier already used, set a neutral background
+                it->setBackground(QBrush());
             }
         }
     }
@@ -158,14 +167,36 @@ void BoardView::clearNewMarks() {
             QTableWidgetItem* it = item(r,c);
             if (it && !it->data(Qt::UserRole+1).toBool()) {
                 MultiplierType mt = static_cast<MultiplierType>(it->data(Qt::UserRole+2).toInt());
-                switch(mt) {
-                case DoublePiece: it->setBackground(QColor(173,216,230)); break;
-                case TriplePiece: it->setBackground(QColor(0,191,255)); break;
-                case DoubleEquation: it->setBackground(QColor(255,182,193)); break;
-                case TripleEquation: it->setBackground(QColor(255,69,0)); break;
-                default: it->setBackground(QBrush()); break;
+                bool used = it->data(Qt::UserRole+3).toBool();
+                if (!used) {
+                    switch(mt) {
+                    case DoublePiece: it->setBackground(QColor(173,216,230)); break;
+                    case TriplePiece: it->setBackground(QColor(0,191,255)); break;
+                    case DoubleEquation: it->setBackground(QColor(255,182,193)); break;
+                    case TripleEquation: it->setBackground(QColor(255,69,0)); break;
+                    default: it->setBackground(QBrush()); break;
+                    }
+                } else {
+                    it->setBackground(QBrush());
                 }
             }
         }
     m_newThisTurn.clear();
+}
+
+// Accessors for multipliers / used
+MultiplierType BoardView::multiplierAt(int r, int c) const {
+    QTableWidgetItem* it = item(r,c);
+    if (!it) return None;
+    return static_cast<MultiplierType>(it->data(Qt::UserRole+2).toInt());
+}
+bool BoardView::multiplierUsedAt(int r, int c) const {
+    QTableWidgetItem* it = item(r,c);
+    if (!it) return false;
+    return it->data(Qt::UserRole+3).toBool();
+}
+void BoardView::setMultiplierUsedAt(int r, int c, bool used) {
+    QTableWidgetItem* it = item(r,c);
+    if (!it) return;
+    it->setData(Qt::UserRole+3, used);
 }

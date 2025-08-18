@@ -5,6 +5,7 @@
 #include <QTableWidget>
 #include <QSet>
 #include <QPair>
+#include <QMap>
 
 struct Placement { int row; int col; QChar ch; };
 
@@ -25,6 +26,11 @@ public:
     void lockNewTiles();
     void rollbackNewTiles(QList<QChar> &returned); // returns chars to rack
     void clearNewMarks();
+
+    // accessors for multipliers / used status
+    MultiplierType multiplierAt(int r, int c) const;
+    bool multiplierUsedAt(int r, int c) const;
+    void setMultiplierUsedAt(int r, int c, bool used);
 
 protected:
     void dragEnterEvent(QDragEnterEvent* e) override;

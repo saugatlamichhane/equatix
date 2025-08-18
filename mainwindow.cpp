@@ -35,11 +35,13 @@ MainWindow::MainWindow(QWidget *parent)
     v->addWidget(title);
     v->addWidget(m_board, 1);
 
-    // Racks row: Player 1 | Player 2
+    // Racks row: Player 1 | Player 2 + scores
     auto *racksRow = new QHBoxLayout;
     {
         auto *p1Layout = new QVBoxLayout;
-        p1Layout->addWidget(new QLabel("Player 1 Rack:"));
+        QLabel *p1label = new QLabel("Player 1 Rack:");
+        p1label->setAlignment(Qt::AlignCenter);
+        p1Layout->addWidget(p1label);
         p1Layout->addWidget(m_racks[0]);
         racksRow->addLayout(p1Layout);
 
@@ -48,11 +50,22 @@ MainWindow::MainWindow(QWidget *parent)
         racksRow->addWidget(spacer);
 
         auto *p2Layout = new QVBoxLayout;
-        p2Layout->addWidget(new QLabel("Player 2 Rack:"));
+        QLabel *p2label = new QLabel("Player 2 Rack:");
+        p2label->setAlignment(Qt::AlignCenter);
+        p2Layout->addWidget(p2label);
         p2Layout->addWidget(m_racks[1]);
         racksRow->addLayout(p2Layout);
     }
     v->addLayout(racksRow);
+
+    // Score bar (below racks)
+    auto *scoreRow = new QHBoxLayout;
+    m_scoreLabels[0] = new QLabel("Player 1: 0");
+    m_scoreLabels[1] = new QLabel("Player 2: 0");
+    scoreRow->addWidget(m_scoreLabels[0]);
+    scoreRow->addStretch();
+    scoreRow->addWidget(m_scoreLabels[1]);
+    v->addLayout(scoreRow);
 
     // Toolbar actions
     auto *toolbar = addToolBar("Actions");
@@ -123,6 +136,107 @@ void MainWindow::endTurn() {
     statusBar()->showMessage(QString("Player %1's turn").arg(m_currentPlayer + 1), 2000);
 }
 
+static int leftmost(const QVector<QVector<QChar>>& b, int r, int c) {
+    while (c-1 >= 0 && !b[r][c-1].isNull()) --c;
+    return c;
+}
+static int topmost(const QVector<QVector<QChar>>& b, int r, int c) {
+    while (r-1 >= 0 && !b[r-1][c].isNull()) --r;
+    return r;
+}
+
+// Tile base scoring rules:
+// digits '1'-'9' => numeric value
+// '0' => 1 point
+// operators '+-*/' => 2 points
+// '=' => 0 points
+static int baseTileScore(QChar ch) {
+    if (ch.isDigit()) {
+        if (ch == '0') return 1;
+        return ch.digitValue();
+    }
+    if (QString("+-*/").contains(ch)) return 2;
+    return 0; // '=' or blank
+}
+
+int MainWindow::computeScoreForTurn(const QVector<QVector<QChar>>& snap, const QSet<QPair<int,int>>& newTiles) {
+    // Calculate score for all distinct equations (horizontal and vertical) that are formed/affected by new tiles.
+    // Multipliers are applied only if multiplier not previously used (we check m_board->multiplierUsedAt).
+    int rows = snap.size();
+    int cols = snap[0].size();
+
+    QSet<QString> countedRuns;
+    int total = 0;
+
+    for (auto rc : newTiles) {
+        int r = rc.first, c = rc.second;
+
+        // Horizontal run
+        int startC = leftmost(snap, r, c);
+        int j = startC;
+        QString runH;
+        while (j < cols && !snap[r][j].isNull()) { runH.append(snap[r][j]); ++j; }
+        if (runH.size() >= 2 && runH.contains('=')) {
+            QString key = QString("H%1:%2").arg(r).arg(runH);
+            if (!countedRuns.contains(key)) {
+                countedRuns.insert(key);
+
+                // compute score for this run
+                long long runScore = 0;
+                long long equationMultiplier = 1;
+                for (int cc = startC; cc < j; ++cc) {
+                    QChar ch = snap[r][cc];
+                    int tileScore = baseTileScore(ch);
+                    // piece multiplier applies only if multiplier there and not used yet
+                    MultiplierType mt = m_board->multiplierAt(r, cc);
+                    bool used = m_board->multiplierUsedAt(r, cc);
+                    if (!used) {
+                        if (mt == DoublePiece) tileScore *= 2;
+                        else if (mt == TriplePiece) tileScore *= 3;
+                        else if (mt == DoubleEquation) equationMultiplier *= 2;
+                        else if (mt == TripleEquation) equationMultiplier *= 3;
+                    }
+                    runScore += tileScore;
+                }
+                runScore *= equationMultiplier;
+                total += int(runScore);
+            }
+        }
+
+        // Vertical run
+        int startR = topmost(snap, r, c);
+        int i = startR;
+        QString runV;
+        while (i < rows && !snap[i][c].isNull()) { runV.append(snap[i][c]); ++i; }
+        if (runV.size() >= 2 && runV.contains('=')) {
+            QString key = QString("V%1:%2").arg(c).arg(runV);
+            if (!countedRuns.contains(key)) {
+                countedRuns.insert(key);
+
+                long long runScore = 0;
+                long long equationMultiplier = 1;
+                for (int rr = startR; rr < i; ++rr) {
+                    QChar ch = snap[rr][c];
+                    int tileScore = baseTileScore(ch);
+                    MultiplierType mt = m_board->multiplierAt(rr, c);
+                    bool used = m_board->multiplierUsedAt(rr, c);
+                    if (!used) {
+                        if (mt == DoublePiece) tileScore *= 2;
+                        else if (mt == TriplePiece) tileScore *= 3;
+                        else if (mt == DoubleEquation) equationMultiplier *= 2;
+                        else if (mt == TripleEquation) equationMultiplier *= 3;
+                    }
+                    runScore += tileScore;
+                }
+                runScore *= equationMultiplier;
+                total += int(runScore);
+            }
+        }
+    }
+
+    return total;
+}
+
 void MainWindow::onValidate() {
     // ensure the active player actually placed tiles
     if (m_board->newTiles().isEmpty()) {
@@ -137,12 +251,21 @@ void MainWindow::onValidate() {
         return;
     }
 
-    // lock tiles and refill only the current player's rack
+    // compute score for this turn (before consuming multipliers)
+    int points = computeScoreForTurn(snap, m_board->newTiles());
+    m_scores[m_currentPlayer] += points;
+    m_scoreLabels[m_currentPlayer]->setText(QString("Player %1: %2").arg(m_currentPlayer + 1).arg(m_scores[m_currentPlayer]));
+
+    // lock tiles and consume multipliers for newly covered squares
     m_board->lockNewTiles();
+
+    // refill only the current player's rack
     refillRack(m_currentPlayer);
 
     // end turn: switch to other player
     endTurn();
+
+    statusBar()->showMessage(QString("Player %1 scored %2 points.").arg(m_currentPlayer == 0 ? 2 : 1).arg(points), 3000);
 }
 
 void MainWindow::onUndo() {
